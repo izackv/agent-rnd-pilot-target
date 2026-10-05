@@ -15,6 +15,10 @@ systemctl daemon-reload && systemctl enable --now pilot-target-pull.timer
 curl -fsS http://127.0.0.1:8081/healthz
 ```
 
+Prerequisite: CT 206 is an LXC; Docker needs the `nesting` feature. On the Proxmox host:
+`pct set 206 --features nesting=1,keyctl=1 && pct reboot 206`, then verify with
+`docker run --rm hello-world` inside the container.
+
 The GHCR package `agent-rnd-pilot-target` must be **public** for an anonymous pull (it is a
 toy app). Otherwise run `docker login ghcr.io` on 206 once with a read-only token.
 
