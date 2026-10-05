@@ -21,3 +21,11 @@ viewers. Do not "fix" the difference.
 | ID | Journey | Test |
 |---|---|---|
 | J-01 | Viewer opens the reports page and sees permitted reports; admin sees the restricted one too | `tests/e2e/test_journey.py` |
+| J-02 | A viewer clicks Export on the reports page and their browser downloads a CSV file containing the three reports they can see, and not the restricted one | `tests/e2e/test_export.py::test_j02_viewer_downloads_permitted_reports` |
+| J-03 | An admin switches the role selector to `admin`, clicks Export, and the downloaded file contains all four reports including "Payroll summary" | `tests/e2e/test_export.py::test_j03_admin_download_contains_the_restricted_report` |
+
+The export control uses `fetch` with the `X-Role` header and builds the download from the response
+Blob. It is deliberately not an `<a href="/api/reports.csv" download>`: a browser attaches no custom
+header to a navigation, so an anchor would download the viewer file even for an admin. The role is
+never placed in the URL. The downloaded file is prefixed with a UTF-8 BOM in the browser; the API
+bytes carry none, so the two differ by exactly the leading `EF BB BF`.
