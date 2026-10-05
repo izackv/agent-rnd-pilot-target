@@ -1,5 +1,6 @@
 # Release to production (Docker on CT 206, D-11). The `production` environment carries the
 # owner-approval gate (D-09): the deploy job does not start until the required reviewer approves.
+# Deploy is pull-based (D-13): approval only moves the `:production` tag; CT 206 polls for it.
 name: release
 on:
   workflow_dispatch:
@@ -37,19 +38,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: production   # required reviewer = owner (D-09)
     steps:
-      - name: deploy to CT 206 over SSH (Q-30 assumption; disabled until DEPLOY_ENABLED=true)
-        if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: promote approved image to :production (pull-based deploy, D-13)
         env:
           IMAGE: ${{ needs.build.outputs.image }}
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          HOST: ${{ vars.DEPLOY_HOST }}
-          USER: ${{ vars.DEPLOY_USER }}
         run: |
           set -euo pipefail
-          install -m 600 /dev/null key && printf '%s\n' "$SSH_KEY" > key
-          scp -i key -o StrictHostKeyChecking=accept-new compose.yaml "$USER@$HOST:~/pilot-target/compose.yaml"
-          ssh -i key -o StrictHostKeyChecking=accept-new "$USER@$HOST" \
-            "cd ~/pilot-target && PILOT_TARGET_IMAGE=$IMAGE docker compose pull -q && PILOT_TARGET_IMAGE=$IMAGE docker compose up -d && sleep 3 && curl -fsS http://127.0.0.1:8081/healthz"
-      - name: deploy skipped
-        if: ${{ vars.DEPLOY_ENABLED != 'true' }}
-        run: echo "DEPLOY_ENABLED is not 'true'; build succeeded, deployment skipped (Q-30 open)."
+          docker buildx imagetools create -t "ghcr.io/${{ github.repository }}:production" "$IMAGE"
+          echo "promoted $IMAGE -> :production; CT 206 pulls it within ~2 minutes (deploy/ct206/)"
