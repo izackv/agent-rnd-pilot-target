@@ -3,6 +3,7 @@ Description=Run pilot-target pull-based deploy every 2 minutes
 
 [Timer]
 OnBootSec=1min
+OnActiveSec=30s
 OnUnitActiveSec=2min
 AccuracySec=15s
 
