@@ -14,6 +14,11 @@ HEADER = b"id,title,owner,rows"  # [D-1]
 EOL = b"\r\n"  # [D-8]
 GUARD = "'"  # [D-4]
 RISKY_PREFIX = ("=", "+", "-", "@", "\t", "\r")  # not decision-dependent (brief §6, contract §9)
+
+#: Leading characters contract §5 requires to pass through *unguarded*. Disjoint from
+#: RISKY_PREFIX, and asserted to be so, so that a character added to the guard alphabet fails a
+#: test instead of silently widening it (AGE-20). `" "` is also pinned by WHITESPACE_PRESERVED.
+SAFE_PREFIX = ("#", "\n", " ", "a", "0", ".", '"')
 BOM = b"\xef\xbb\xbf"  # [D-3] — downloaded file only; never on the wire
 FILENAME_RE = r'^attachment; filename="reports-(\d{4}-\d{2}-\d{2})\.csv"$'  # [D-2]
 WHITESPACE_PRESERVED = True  # [QA-D-A]
