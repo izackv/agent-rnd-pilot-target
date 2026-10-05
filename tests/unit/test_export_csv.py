@@ -27,6 +27,7 @@ from tests.export_contract import (
     GUARD,
     HEADER,
     RISKY_PREFIX,
+    SAFE_PREFIX,
     VIEWER_BODY,
     WHITESPACE_PRESERVED,
 )
@@ -192,6 +193,31 @@ def test_guard_prefixes_every_risky_leading_character(char: str):
     for field in _records(output)[1][1:3]:
         assert field.startswith(GUARD)
         assert field[0] not in RISKY_PREFIX
+
+
+def test_the_guard_alphabet_is_exactly_the_contract_list():
+    """Equality, not membership — a character *added* to `RISKY_PREFIXES` must fail too.
+
+    Every other guard assertion iterates *over* `RISKY_PREFIX`, which catches a character removed
+    from the guard alphabet and is blind to one added to it. Contract §5's list is normative, so
+    pin it in both directions here and keep the negative fixtures honestly non-risky.
+    """
+    assert set(export_module.RISKY_PREFIXES) == set(RISKY_PREFIX)
+    assert set(SAFE_PREFIX).isdisjoint(RISKY_PREFIX)
+
+
+@pytest.mark.parametrize("char", list(SAFE_PREFIX))
+def test_a_non_risky_leading_character_is_never_guarded(char: str):
+    """The negative direction of the guard: a plausible-looking prefix stays untouched.
+
+    `" "` is deliberately in this set: WHITESPACE_PRESERVED [QA-D-A] makes a leading space both a
+    non-risky prefix and a pinned decision. `\\n` is here and `\\r` is not — only CR is risky.
+    """
+    assert safe(char + "x") == char + "x"
+    output = render_reports_csv([Report(1, char + "x", char + "y", 1)])
+    for field, expected in zip(_records(output)[1][1:3], (char + "x", char + "y"), strict=True):
+        assert field == expected
+        assert not field.startswith(GUARD)
 
 
 def test_guard_examines_only_the_first_character():
