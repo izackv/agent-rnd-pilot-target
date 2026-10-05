@@ -53,6 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # gitleaks diffs commit ranges; a shallow clone has no parent
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - name: dependency audit
