@@ -1,0 +1,55 @@
+# Release to production (Docker on CT 206, D-11). The `production` environment carries the
+# owner-approval gate (D-09): the deploy job does not start until the required reviewer approves.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Integrated commit SHA to release (must be on main)"
+        required: true
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
+      - name: refuse commits not on main
+        run: git fetch origin main && git merge-base --is-ancestor "${{ inputs.ref }}" origin/main
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: echo "image=ghcr.io/${{ github.repository }}:${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production   # required reviewer = owner (D-09)
+    steps:
+      - name: deploy to CT 206 over SSH (Q-30 assumption; disabled until DEPLOY_ENABLED=true)
+        if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null key && printf '%s\n' "$SSH_KEY" > key
+          scp -i key -o StrictHostKeyChecking=accept-new compose.yaml "$USER@$HOST:~/pilot-target/compose.yaml"
+          ssh -i key -o StrictHostKeyChecking=accept-new "$USER@$HOST" \
+            "cd ~/pilot-target && PILOT_TARGET_IMAGE=$IMAGE docker compose pull -q && PILOT_TARGET_IMAGE=$IMAGE docker compose up -d && sleep 3 && curl -fsS http://127.0.0.1:8081/healthz"
+      - name: deploy skipped
+        if: ${{ vars.DEPLOY_ENABLED != 'true' }}
+        run: echo "DEPLOY_ENABLED is not 'true'; build succeeded, deployment skipped (Q-30 open)."

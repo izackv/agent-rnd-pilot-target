@@ -1,0 +1,5 @@
+# Policy-bearing files need the owner's review (gates.md section 5).
+/.github/            @izackv
+/scripts/docs_check.py @izackv
+/Dockerfile          @izackv
+/compose.yaml        @izackv
