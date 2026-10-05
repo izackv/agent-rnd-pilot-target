@@ -27,6 +27,9 @@ def main() -> int:
     base = os.environ.get("DOCS_CHECK_BASE", "origin/main")
     head = os.environ.get("DOCS_CHECK_HEAD", "HEAD")
     body = os.environ.get("DOCS_CHECK_PR_BODY", "")
+    if set(base) <= {"0"}:  # first push to a new branch: no base to diff against
+        print("no base commit (initial push); nothing to check")
+        return 0
     files = changed(base, head)
     app_changed = [f for f in files if f.startswith("app/")]
     docs_changed = [f for f in files if f.startswith("docs/")]
