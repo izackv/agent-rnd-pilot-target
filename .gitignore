@@ -5,3 +5,7 @@ __pycache__/
 .ruff_cache/
 test-results/
 .env
+
+# agent runtime state, never source
+.claude/
+.opencode/
