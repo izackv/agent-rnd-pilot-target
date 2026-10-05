@@ -16,12 +16,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 API_MD = REPO_ROOT / "docs" / "api.md"
 
-#: Journey rows `docs/api.md` must carry, and the test file each one names. J-02 and J-03 are the
-#: two browser export journeys and belong to the UI issue, which owns the export control; they
-#: join this tuple in the same commit as `tests/e2e/test_export.py`, and until then the
-#: "no dangling row" assertion below still covers them if that issue lands its rows first.
+#: Journey rows `docs/api.md` must carry, and the test target each one names. Three export rows,
+#: per settlement S-5 (test plan §4 over contract §10's two): J-03 earns its own id because the
+#: admin browser path is the only journey that fails for an anchor-based control.
 REQUIRED_JOURNEYS = [
     ("J-01", "tests/e2e/test_journey.py"),
+    ("J-02", "tests/e2e/test_export.py::test_j02_viewer_downloads_permitted_reports"),
+    ("J-03", "tests/e2e/test_export.py::test_j03_admin_download_contains_the_restricted_report"),
     ("J-04", "tests/integration/test_export.py"),
 ]
 
@@ -54,14 +55,25 @@ def test_api_md_documents_the_export_route(api_md: str):
 
 
 def test_api_md_lists_the_new_journeys_with_their_test_files(api_md: str):
-    """AC-17: every required journey row is present with the test file it names, and — the other
-    direction — no journey row names a file that does not exist on disk."""
+    """AC-17: every required journey row is present naming the test it names, and — the other
+    direction — no journey row points at a test that does not exist.
+
+    A row may name a file (`tests/integration/test_export.py`) or a specific test within one
+    (`...::test_j02_...`). Both halves of a `::` target are checked: the file must exist on disk
+    **and** the named function must be defined in it. Checking only the file would let a row rot
+    into a reference to a renamed test while still passing.
+    """
     documented = dict(JOURNEY_ROW.findall(api_md))
     assert documented, "no journey rows found in docs/api.md"
 
-    for journey_id, test_path in REQUIRED_JOURNEYS:
+    for journey_id, target in REQUIRED_JOURNEYS:
         assert journey_id in documented, f"{journey_id} is missing from docs/api.md"
-        assert documented[journey_id] == test_path
+        assert documented[journey_id] == target
 
-    for journey_id, test_path in documented.items():
-        assert (REPO_ROOT / test_path).exists(), f"{journey_id} names a missing file: {test_path}"
+    for journey_id, target in documented.items():
+        path, _, test_name = target.partition("::")
+        source = REPO_ROOT / path
+        assert source.exists(), f"{journey_id} names a missing file: {path}"
+        if test_name:
+            defined = re.search(rf"^def {re.escape(test_name)}\(", source.read_text(), re.M)
+            assert defined, f"{journey_id} names {test_name}, which is not defined in {path}"
