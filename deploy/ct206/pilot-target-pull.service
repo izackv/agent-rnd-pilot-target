@@ -1,0 +1,9 @@
+[Unit]
+Description=pilot-target pull-based deploy (D-13)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/pilot-target
+ExecStart=/opt/pilot-target/pilot-target-pull.sh

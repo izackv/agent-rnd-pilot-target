@@ -1,0 +1,38 @@
+# Reviewer identity for the pilot (control repo D-12 interim): the GitHub Actions bot submits
+# the review so that implementer (owner session) and approver (github-actions[bot]) differ.
+# Dispatchable only by users with write access. Replace with the machine user when it exists.
+name: reviewer-approve
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number"
+        required: true
+      verdict:
+        description: "approve | request-changes"
+        required: true
+        default: approve
+      summary:
+        description: "Review summary (findings, evidence checked)"
+        required: true
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: submit review as github-actions[bot]
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr }}
+          VERDICT: ${{ inputs.verdict }}
+          SUMMARY: ${{ inputs.summary }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$VERDICT" in
+            approve)         gh pr review "$PR" --repo "$REPO" --approve --body "$SUMMARY" ;;
+            request-changes) gh pr review "$PR" --repo "$REPO" --request-changes --body "$SUMMARY" ;;
+            *) echo "unknown verdict: $VERDICT"; exit 2 ;;
+          esac
