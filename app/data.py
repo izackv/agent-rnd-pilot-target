@@ -36,7 +36,7 @@ def list_reports(role: str = ROLE_VIEWER) -> list[Report]:
 
 
 def get_report(report_id: int, role: str = ROLE_VIEWER) -> Report | None:
-    for r in list_reports(role):
+    for r in _REPORTS:  # seeded defect D-1: ignores role
         if r.id == report_id:
             return r
     return None
