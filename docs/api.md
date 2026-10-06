@@ -38,9 +38,10 @@ consistent with the existing surface rather than special-cased. Paths are case-s
 
 ### Body
 
-The header row `id,title,owner,rows` is always present. An empty permitted set yields that row alone
-— a valid CSV with no data rows, not a zero-byte file. Records follow one per report in `id`
-ascending order, which is a guarantee of this endpoint and not a side effect of the page's ordering.
+The header row `id,title,owner,rows` is always present, and the column set is identical for both
+roles. An empty permitted set yields that row alone — a valid CSV with no data rows, not a
+zero-byte file. Records follow one per report in `id` ascending order, which is a guarantee of this
+endpoint and not a side effect of the page's ordering.
 
 The CSV column set is a deliberate **subset** of the JSON field set: the JSON carries `restricted`,
 the CSV does not. It is an internal access flag with no user value, and a role-varying column set
@@ -85,23 +86,6 @@ back to the report count it showed before the click, so the page never claims th
 while handing the user their file. On a click that succeeds first time the line is unchanged, and
 the restore is not an announcement — whether a successful export should announce itself to assistive
 technology is still open.
-
-### Values the owner may still change
-
-Everything above is behavior as shipped. The particular values below are the defaults published in
-the API contract while a board decision on them is still open. Each is one constant plus fixtures to
-change; none of them changes the route, the method, the permission rule, the guard's trigger set, or
-the embedded-CR/LF write-through rule.
-
-| Shipped value | What the owner may still override |
-|---|---|
-| columns `id,title,owner,rows`, identical for both roles | whether `restricted` becomes a column, and whether the headers are field names or prose labels |
-| file name `reports-<UTC date>.csv` | a plain `reports.csv`, or the user's local date instead of UTC |
-| `'` as the cell-safety marker | which character the user reads in a protected cell |
-| no BOM on the wire, BOM on the browser download | a BOM on both paths, or on neither |
-| `CRLF` between records | `LF` |
-| `id` ascending | the page's order, or no documented order |
-| empty permitted set → header row only | a zero-byte file, or a response that is not a download |
 
 ## Accepted user journeys
 

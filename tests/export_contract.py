@@ -1,9 +1,10 @@
 """The CSV export's wire contract as test constants. One edit here re-points every assertion.
 
-Pinned to contract v1.1 (AGE-4) and test plan v1.1 §0 (AGE-5). Each name below that cites a
-decision is still open on the board's consolidated card; if the board answers differently, change
-it here and nowhere else. A test that hardcodes `b"id,title,owner,rows"` instead of importing
-`HEADER` is a review defect, because it hides which assertions a reopened decision invalidates.
+Pinned to contract v1.1 (AGE-4) and test plan v1.1 §0 (AGE-5). Every decision cited below was
+ratified as recommended by the owner on card `4078654f` (2026-10-06); none is still open. Should
+one ever be reopened and answered differently, change it here and nowhere else. A test that
+hardcodes `b"id,title,owner,rows"` instead of importing `HEADER` is a review defect, because it
+hides which assertions a reopened decision invalidates.
 
 Constants only: no tests, and no import from `app`. This module lives at `tests/` level rather
 than under `tests/unit/` because `tests/unit/` has no `__init__.py`, so constants placed there

@@ -197,8 +197,17 @@ def test_page_state_is_unchanged_after_export(page: Page, base_url: str):
     """AC-1, negative half, and R-4. The export must not perturb the page it was invoked from.
 
     `#status` is the sharp edge: `tests/e2e/test_journey.py:11` asserts it reads exactly
-    `"3 reports"` on load, so the control may write there **only** on a click that fails. A
-    successful export leaves it alone, and this test is what holds the UI to that.
+    `"3 reports"` on load. The operative rule (`decision-register` §G.5) is that the export control
+    may not **perturb** `#status`'s steady state. It may write the failure copy on a click that
+    fails, and it may rewrite the steady-state count idempotently. It may never write on page load,
+    and it may never leave text that differs from the steady state after a successful export.
+
+    This test holds the UI to that last clause, and to nothing more: the predicate asserts text
+    **equality** across a successful click, not the absence of a write. Since PR #19 (AGE-55)
+    `exportCsv()` *does* write on the success path — it restores the row count idempotently, which
+    is why this guard still passes unmodified. Do not "restore" an only-on-failure invariant by
+    deleting that write; it would reintroduce product finding F-1 with this test still green. The
+    other end of the pair is `test_a_successful_export_clears_an_earlier_failure_message`.
     """
     _open_reports(page, base_url)
     rows_before = page.locator("#reports tbody tr").count()
