@@ -42,6 +42,7 @@ jobs:
         run: uv run pytest -q
   docs:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'   # the waiver line lives in the PR body; post-merge pushes have no PR body
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
