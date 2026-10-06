@@ -70,6 +70,16 @@ async function exportCsv() {
     // differ by exactly the leading EF BB BF, and that is intended (contract §4, [D-3]).
     const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
     triggerDownload(blob, filenameFrom(res.headers.get("Content-Disposition")) ?? "reports.csv");
+    // F-1: a succeeding export used to leave an earlier click's EXPORT_FAILED copy standing in
+    // #status forever. Restore the steady state `load()` would have left instead of clearing or
+    // announcing: the write is *idempotent*, so on a first-click success #status is byte-identical
+    // and AC-1's negative half still holds (tests/e2e/test_export.py
+    // ::test_page_state_is_unchanged_after_export asserts text equality, not absence of a write).
+    // The string must stay in lockstep with the one line 16 produces, or that guard fails.
+    // Deliberately not an announcement: whether a success should reach assistive tech is F-2, open
+    // as AGE-42, and differing text here would break AC-1.
+    const rows = document.querySelectorAll("#reports tbody tr");
+    status.textContent = rows.length ? `${rows.length} reports` : "No reports";
   } catch (err) {
     // Every failure mode in this region reaches the same user-facing copy (contract §1 point 6), so
     // the cause — a dropped connection, a decode error, a Content-Length mismatch — is only

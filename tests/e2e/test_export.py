@@ -33,7 +33,7 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.export_contract import BOM, EXPORT_FAILED, HEADER
+from tests.export_contract import BOM, EXPORT_FAILED, HEADER, VIEWER_BODY
 
 EXPORT = "#export"
 FILENAME_RE = re.compile(r"reports-\d{4}-\d{2}-\d{2}\.csv")
@@ -47,13 +47,21 @@ FILENAME_RE = re.compile(r"reports-\d{4}-\d{2}-\d{2}\.csv")
 #: Deliberately touches nothing but `window.fetch`: no `HTMLAnchorElement.prototype.click` or
 #: `URL.revokeObjectURL` patches. Those observe DOM mechanics rather than user-visible outcomes,
 #: and on Chromium — the only engine in test plan v1.1 §7 — neither is observable in behavior.
-_REJECT_BODY_READ = """
+#:
+#: `__ONLY_FIRST__` is substituted by `_reject_body_read`; it latches the stub so only the *first*
+#: export fails and every later one is served the genuine response. Templated rather than copied so
+#: that two failure tests cannot drift into disagreeing about what "a dropped body read" is.
+_REJECT_BODY_READ_TEMPLATE = """
 (() => {
+  const onlyFirst = __ONLY_FIRST__;
   const realFetch = window.fetch;
+  let failed = false;
   window.fetch = async (...args) => {
     const response = await realFetch(...args);
     const url = typeof args[0] === "string" ? args[0] : args[0].url;
     if (!url.includes("reports.csv")) return response;
+    if (onlyFirst && failed) return response;
+    failed = true;
     return new Proxy(response, {
       get(target, prop) {
         if (prop === "text") {
@@ -66,6 +74,16 @@ _REJECT_BODY_READ = """
   };
 })();
 """
+
+
+def _reject_body_read(*, only_first: bool = False) -> str:
+    """The init script above, with the latch either armed or off.
+
+    `only_first=False` fails the body read of *every* `reports.csv` request, which is what a test
+    of the failure path alone wants. `only_first=True` fails exactly one, which is the only way to
+    observe what the UI leaves behind once a failed export is followed by a successful one (F-1).
+    """
+    return _REJECT_BODY_READ_TEMPLATE.replace("__ONLY_FIRST__", "true" if only_first else "false")
 
 
 def _download_bytes(page: Page) -> tuple[bytes, str]:
@@ -262,9 +280,10 @@ def test_a_failed_body_read_surfaces_the_failure_copy(page: Page, base_url: str)
     # `downloads.append` is a `builtin_function_or_method`, which rejects attributes.
     page.on("download", lambda download: downloads.append(download))
 
-    # Must precede the navigation in `_open_reports`: an init script only applies to documents
-    # loaded after it is registered.
-    page.add_init_script(_REJECT_BODY_READ)
+    # The latch is off: every body read fails, which is all this test needs. Must precede the
+    # navigation in `_open_reports` — an init script only applies to documents loaded after it is
+    # registered.
+    page.add_init_script(_reject_body_read())
     _open_reports(page, base_url)
     rows_before = page.locator("#reports tbody tr").count()
     assert page.locator("#status").inner_text() == "3 reports"  # the proxy spares /api/reports
@@ -279,4 +298,46 @@ def test_a_failed_body_read_surfaces_the_failure_copy(page: Page, base_url: str)
     assert page_errors == []
 
     # The failed export leaves the table it was invoked from alone (R-4).
+    assert page.locator("#reports tbody tr").count() == rows_before
+
+
+def test_a_successful_export_clears_an_earlier_failure_message(page: Page, base_url: str):
+    """F-1, found on AGE-40 and re-scoped by AGE-55: the S-4 failure copy was **sticky**. Nothing
+    but reloading the page or changing role ever took it back out of `#status`, so a user whose
+    export failed once read `Export failed. Please try again.` while their file was downloading.
+
+    The fix is an *idempotent* restore of the steady state `load()` leaves — the row count — rather
+    than a cleared or a success-specific message:
+
+    * a different string would break AC-1's negative half, which
+      `test_page_state_is_unchanged_after_export` holds the UI to by asserting text **equality**
+      before and after a successful click;
+    * an announcement is a separate, open question (F-2, AGE-42) and not what this test asserts.
+      Writing identical text to a `role="status"` region generally does not re-announce, so this
+      test deliberately claims nothing about assistive tech.
+
+    Both clicks are required. The first proves the failure copy really was shown — otherwise a
+    permanently-passing test could assert the end state of an export that never failed — and the
+    second proves it is gone *and* that the export itself still works, by checking the file.
+    """
+    # The latch is the whole mechanism: one failing body read, then the genuine response. Must
+    # precede the navigation in `_open_reports`: an init script only applies to documents loaded
+    # after it is registered.
+    page.add_init_script(_reject_body_read(only_first=True))
+    _open_reports(page, base_url)
+    rows_before = page.locator("#reports tbody tr").count()
+    status_before = page.locator("#status").inner_text()
+    assert status_before == "3 reports"  # the proxy spares /api/reports
+
+    page.locator(EXPORT).click()
+    expect(page.locator("#status")).to_have_text(EXPORT_FAILED)
+
+    payload, filename = _download_bytes(page)
+
+    # The F-1 symptom, stated the way the acceptance criterion is: the stale copy is gone.
+    expect(page.locator("#status")).not_to_have_text(EXPORT_FAILED)
+    assert page.locator("#status").inner_text() == status_before
+    # ...and the retry was a real export, not an inert click that merely tidied the status line.
+    assert payload == BOM + VIEWER_BODY
+    assert FILENAME_RE.fullmatch(filename), filename
     assert page.locator("#reports tbody tr").count() == rows_before
