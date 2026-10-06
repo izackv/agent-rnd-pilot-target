@@ -56,13 +56,26 @@ async function exportCsv() {
   // the file build sit inside the try rather than after it (contract §1 [E-2], §7 UI rows).
   try {
     const res = await fetch("/api/reports.csv", { headers: { "X-Role": role } });
-    if (!res.ok) { status.textContent = EXPORT_FAILED; return; }
+    if (!res.ok) {
+      // The HTTP arm shows the same copy as the throw path below, and it is the likeliest real
+      // failure (a 403 from the role guard, a 500 from the serializer), so it needs the same
+      // diagnosability. Status line only: the response body, the Content-Disposition value and the
+      // selected role must not reach the console.
+      console.error("CSV export failed: HTTP", res.status, res.statusText);
+      status.textContent = EXPORT_FAILED;
+      return;
+    }
     const text = await res.text();
     // The BOM is client-side only; the API bytes carry none. The downloaded file and the response
     // differ by exactly the leading EF BB BF, and that is intended (contract §4, [D-3]).
     const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
     triggerDownload(blob, filenameFrom(res.headers.get("Content-Disposition")) ?? "reports.csv");
-  } catch {
+  } catch (err) {
+    // Every failure mode in this region reaches the same user-facing copy (contract §1 point 6), so
+    // the cause — a dropped connection, a decode error, a Content-Length mismatch — is only
+    // recoverable from the console. Log it so a field report of "the export says it failed" is
+    // diagnosable; the #status copy below is unchanged (contract §7).
+    console.error("CSV export failed", err);
     status.textContent = EXPORT_FAILED;
   }
 }
