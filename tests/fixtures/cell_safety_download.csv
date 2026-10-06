@@ -1,0 +1,14 @@
+﻿id,title,owner,rows
+9,'=SUM(A1:A9),"a,b",7
+10,"He said ""hi""","line1
+line2",0
+11,'	Tabbed,'-finance,-5
+12,,'@ops,0
+13,Café ☕ naïve, lead ,3
+14,'+1,ops,1
+15,"'CR",ops,1
+16,a=b,ops,1
+17, =notfirst,ops,1
+18,already'quoted,ops,1
+19,"'=a,b",ops,1
+20,spark 🙂,ops,1

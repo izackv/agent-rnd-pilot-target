@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import inspect
 import io
+import pathlib
 import re
 from dataclasses import fields
 
@@ -22,6 +23,7 @@ from app.export import COLUMNS, render_reports_csv
 from app.export import _safe as safe
 from tests.export_contract import (
     ADMIN_BODY,
+    BOM,
     EMPTY_BODY,
     EOL,
     GUARD,
@@ -313,3 +315,61 @@ def test_restricted_is_neither_a_column_nor_a_value_in_the_body():
 def test_export_module_never_mentions_restricted():
     """Structural guarantee of contract §6: the export never names the visibility flag at all."""
     assert "restricted" not in inspect.getsource(export_module)
+
+
+# --- the committed artifact the manual sign-off is performed against (§5.4, AGE-19) ---------
+
+FIXTURES_DIR = pathlib.Path(__file__).resolve().parents[1] / "fixtures"
+
+#: Wire shape — byte-identical to what the route serves, no BOM [D-3].
+CELL_SAFETY_CSV = FIXTURES_DIR / "cell_safety.csv"
+
+#: Download shape — the BOM-prefixed file a user actually double-clicks into a spreadsheet [D-3].
+CELL_SAFETY_DOWNLOAD_CSV = FIXTURES_DIR / "cell_safety_download.csv"
+
+#: `=SUM()` over the `rows` column, which §5.4 item 4 signs off by hand in four spreadsheets.
+SIGNED_OFF_ROWS_TOTAL = 12
+
+
+def _cell_safety_body() -> bytes:
+    return render_reports_csv([report for _, report, _ in CELL_SAFETY_FIXTURES])
+
+
+def test_committed_cell_safety_fixture_is_byte_equal_to_the_serializer_output():
+    """§5.4's artifact must not be able to drift from §3.3's expectations.
+
+    The manual spreadsheet sign-off is performed against the committed file rather than against
+    whatever the serializer produced that day, so a sign-off naming a commit SHA is only meaningful
+    while this equality holds. This assertion — not a human's memory — is what keeps it true.
+    Regenerate the fixtures with `uv run python scripts/regen_cell_safety_fixture.py`.
+    """
+    assert CELL_SAFETY_CSV.read_bytes() == _cell_safety_body()
+
+
+def test_committed_cell_safety_fixture_carries_every_expected_record():
+    body = CELL_SAFETY_CSV.read_bytes()
+    assert body.startswith(HEADER + EOL)
+    for name, _, expected in CELL_SAFETY_FIXTURES:
+        assert expected in body, name
+    # Record count from the parser, never from splitting on EOL (§3.3, trap 3).
+    assert len(_records(body)) == 1 + len(CELL_SAFETY_FIXTURES)
+
+
+def test_download_shaped_fixture_is_the_wire_fixture_behind_a_bom():
+    """The file a human opens is the BOM-prefixed one, so the sign-off covers both shapes."""
+    assert CELL_SAFETY_DOWNLOAD_CSV.read_bytes() == BOM + CELL_SAFETY_CSV.read_bytes()
+
+
+def test_the_fixture_rows_column_sums_to_the_signed_off_total():
+    """§5.4 item 4 signs off `=SUM()` over the `rows` column as exactly 12.
+
+    That number is quoted as evidence in a sign-off comment, so it must not be able to move without
+    a test failing. A fixture edit that changed the total would otherwise silently void the signed
+    item 4 while every other assertion here still passed.
+    """
+    records = _records(CELL_SAFETY_CSV.read_bytes())[1:]
+    assert sum(int(record[3]) for record in records) == SIGNED_OFF_ROWS_TOTAL
+    # The total is only a cell-safety signal while every term is a bare number (AC-18, trap 2).
+    for record in records:
+        assert re.fullmatch(r"-?[0-9]+", record[3])
+        assert GUARD not in record[3]
