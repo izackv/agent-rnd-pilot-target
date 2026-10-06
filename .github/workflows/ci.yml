@@ -38,6 +38,8 @@ jobs:
       - run: uv sync --frozen
       - run: uv run playwright install --with-deps chromium
       - run: uv run pytest tests/e2e -q
+      - name: full suite in one invocation (collection across all test dirs)
+        run: uv run pytest -q
   docs:
     runs-on: ubuntu-latest
     steps:
