@@ -23,6 +23,13 @@ BOM = b"\xef\xbb\xbf"  # [D-3] — downloaded file only; never on the wire
 FILENAME_RE = r'^attachment; filename="reports-(\d{4}-\d{2}-\d{2})\.csv"$'  # [D-2]
 WHITESPACE_PRESERVED = True  # [QA-D-A]
 
+#: The one string the UI may write to `#status` when an export fails, fixed by settlement S-4
+#: (D-13). Declared in `app/static/app.js` as `EXPORT_FAILED`; pinned here so a copy change is a
+#: one-line edit rather than a retyped literal in every failure test. Deliberately *not* read out
+#: of the page at runtime: a test that asked the app for its own copy would pass for any copy and
+#: so could not hold the UI to S-4.
+EXPORT_FAILED = "Export failed. Please try again."  # [S-4]
+
 # Today's seed data, both roles (test plan §3.2). No seed report triggers the guard or any
 # quoting, which is exactly why the cell-safety fixtures exist.
 VIEWER_BODY = (

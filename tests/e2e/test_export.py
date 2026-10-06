@@ -33,10 +33,39 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.export_contract import BOM, HEADER
+from tests.export_contract import BOM, EXPORT_FAILED, HEADER
 
 EXPORT = "#export"
 FILENAME_RE = re.compile(r"reports-\d{4}-\d{2}-\d{2}\.csv")
+
+#: Proxies `window.fetch` so that `/api/reports.csv` resolves with real headers and a real status,
+#: and only the **body read** rejects — a connection dropped after the response line, which is the
+#: one failure the `fetch` call's own `try` cannot see. Everything the control reads off the
+#: response (`ok`, `headers`) is delegated to the genuine `Response`, so the test exercises the
+#: real success path right up to `text()`.
+#:
+#: Deliberately touches nothing but `window.fetch`: no `HTMLAnchorElement.prototype.click` or
+#: `URL.revokeObjectURL` patches. Those observe DOM mechanics rather than user-visible outcomes,
+#: and on Chromium — the only engine in test plan v1.1 §7 — neither is observable in behavior.
+_REJECT_BODY_READ = """
+(() => {
+  const realFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const response = await realFetch(...args);
+    const url = typeof args[0] === "string" ? args[0] : args[0].url;
+    if (!url.includes("reports.csv")) return response;
+    return new Proxy(response, {
+      get(target, prop) {
+        if (prop === "text") {
+          return () => Promise.reject(new TypeError("body read failed"));
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
+})();
+"""
 
 
 def _download_bytes(page: Page) -> tuple[bytes, str]:
@@ -205,3 +234,49 @@ def test_download_filename_comes_from_the_response_header(page: Page, base_url: 
     _, filename = _download_bytes(page)
     assert filename == expected.group(1)
     assert FILENAME_RE.fullmatch(filename), filename
+
+
+def test_a_failed_body_read_surfaces_the_failure_copy(page: Page, base_url: str):
+    """Contract §7 UI row and settlement S-4: a body read that fails *after* the response headers
+    arrived must surface in `#status`, download nothing, and raise nothing at the page.
+
+    This is the one export failure the response-status check cannot catch. `res.ok` is true, the
+    headers are real, and the rejection comes from `res.text()` — so if the body read sits outside
+    the control's `try`, the click is **inert**: no file, no message, and an unhandled rejection.
+    That exact triple was observed on `main@8b3ea8f`, before AGE-27 moved the read inside the guard.
+
+    All three assertions are user-visible, which is why this is worth standing coverage rather than
+    a one-off diagnostic:
+
+    * `#status` carries the S-4 copy, imported from `tests/export_contract.py` so that a copy change
+      is one edit and cannot be silently diverged from here;
+    * **no** download fires — the contract forbids handing the user a file built from a failed read,
+      and a zero-byte or truncated `reports-*.csv` would be worse than an error message;
+    * nothing reaches `pageerror`. An unhandled rejection is not merely untidy: it is the signal
+      that the failure was never handled at all, and it is invisible to a status assertion alone.
+    """
+    page_errors: list[str] = []
+    downloads: list[object] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    # Both handlers are lambdas, not bound builtins: Playwright annotates the handler object, and
+    # `downloads.append` is a `builtin_function_or_method`, which rejects attributes.
+    page.on("download", lambda download: downloads.append(download))
+
+    # Must precede the navigation in `_open_reports`: an init script only applies to documents
+    # loaded after it is registered.
+    page.add_init_script(_REJECT_BODY_READ)
+    _open_reports(page, base_url)
+    rows_before = page.locator("#reports tbody tr").count()
+    assert page.locator("#status").inner_text() == "3 reports"  # the proxy spares /api/reports
+
+    page.locator(EXPORT).click()
+
+    # `to_have_text` is exact and auto-waiting, so it is also the synchronisation point for the two
+    # negative assertions below: a download or a page error on this click would have to land before
+    # the status settles.
+    expect(page.locator("#status")).to_have_text(EXPORT_FAILED)
+    assert downloads == []
+    assert page_errors == []
+
+    # The failed export leaves the table it was invoked from alone (R-4).
+    assert page.locator("#reports tbody tr").count() == rows_before
