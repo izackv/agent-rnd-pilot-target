@@ -90,6 +90,7 @@ def _unguard(field: str) -> str:
 
 
 def test_columns_is_an_explicit_tuple_pinned_to_the_contract():
+    """AC-8 (R-2): the four columns are the contract's, in order, before any row is written."""
     assert COLUMNS == ("id", "title", "owner", "rows")
 
 
@@ -121,6 +122,7 @@ def test_viewer_seed_body_is_exact_bytes():
 
 
 def test_admin_seed_body_is_exact_bytes():
+    """AC-3b at serializer level: §3.2's 130-byte admin literal, the twin of AC-2's viewer body."""
     output = render_reports_csv(data.list_reports(data.ROLE_ADMIN))
     assert output == ADMIN_BODY
     assert len(output) == 130
@@ -146,6 +148,7 @@ def test_cell_safety_fixture_bytes(report: Report, expected: bytes):
 
 
 def test_embedded_crlf_in_a_field_is_written_through_verbatim():
+    """AC-11 and AC-24: an embedded CRLF survives, and the record count comes from the parser."""
     output = render_reports_csv([FIXTURE_21])
     assert output == HEADER + EOL + FIXTURE_21_RECORD
     # The trap: splitting on EOL sees three pieces in a two-record file.
