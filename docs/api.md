@@ -106,6 +106,7 @@ the embedded-CR/LF write-through rule.
 | J-03 | An admin switches the role selector to `admin`, clicks Export, and the downloaded file contains all four reports including "Payroll summary" | `tests/e2e/test_export.py::test_j03_admin_download_contains_the_restricted_report` |
 | J-04 | A client exports the permitted reports as CSV through the API; with no role header it receives the viewer file, with `X-Role: admin` all four reports, and no query parameter can widen either | `tests/integration/test_export.py` |
 
-The three export journeys name the files their tests will live in; those files are not in the tree
-yet. The export's integration and end-to-end suites are still to be written, so what runs today is
-the reports-page journey above and the serializer's unit tests in `tests/unit/test_export_csv.py`.
+`tests/unit/test_docs_traceability.py` asserts the rows in this table rather than leaving them to a
+reviewer's eye: CI's `docs` job only checks that *some* file under `docs/` changed when `app/`
+changed, never what it says. It also checks the other direction — that no row names a test file or
+test function missing from the tree — so a journey row cannot rot into a reference to a renamed test.
