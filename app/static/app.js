@@ -29,30 +29,42 @@ function filenameFrom(disposition) {
   return (match[1] ?? match[2]).trim() || null;
 }
 
+// Firefox and WebKit have historically required the download anchor to be in the document when
+// clicked and the object URL to be revoked on a later task; Chromium needs neither precaution.
+// Taking both is free, and it keeps a one-engine verification from reading as a portability claim
+// (contract §1, [E-3]).
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 // Role travels in the X-Role header, never in the URL: a navigation or `<a href download>` sends no
 // custom header, so an anchor control would download the viewer file for an admin too. A role in the
 // query string would be a second permission door and a shareable widening link (contract §1).
 async function exportCsv() {
   const role = document.getElementById("role").value;
   const status = document.getElementById("status");
-  let res;
+  // One guarded region. The body read can reject after the response headers have arrived, so it and
+  // the file build sit inside the try rather than after it (contract §1 [E-2], §7 UI rows).
   try {
-    res = await fetch("/api/reports.csv", { headers: { "X-Role": role } });
+    const res = await fetch("/api/reports.csv", { headers: { "X-Role": role } });
+    if (!res.ok) { status.textContent = EXPORT_FAILED; return; }
+    const text = await res.text();
+    // The BOM is client-side only; the API bytes carry none. The downloaded file and the response
+    // differ by exactly the leading EF BB BF, and that is intended (contract §4, [D-3]).
+    const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
+    triggerDownload(blob, filenameFrom(res.headers.get("Content-Disposition")) ?? "reports.csv");
   } catch {
     status.textContent = EXPORT_FAILED;
-    return;
   }
-  if (!res.ok) { status.textContent = EXPORT_FAILED; return; }
-  const text = await res.text();
-  // The BOM is client-side only; the API bytes carry none. The downloaded file and the response
-  // differ by exactly the leading EF BB BF, and that is intended (contract §4, [D-3]).
-  const blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filenameFrom(res.headers.get("Content-Disposition")) ?? "reports.csv";
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 document.getElementById("role").addEventListener("change", load);
