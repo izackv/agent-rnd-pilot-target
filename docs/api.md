@@ -80,6 +80,12 @@ response differ by exactly the leading `EF BB BF` and nothing else. The file nam
 response's `Content-Disposition`. The control is present and enabled for both roles. When the
 request fails, the page reports it in the status line and downloads nothing.
 
+A failure message does not outlive the failure: a later export that succeeds puts the status line
+back to the report count it showed before the click, so the page never claims the export failed
+while handing the user their file. On a click that succeeds first time the line is unchanged, and
+the restore is not an announcement — whether a successful export should announce itself to assistive
+technology is still open.
+
 ### Values the owner may still change
 
 Everything above is behavior as shipped. The particular values below are the defaults published in
